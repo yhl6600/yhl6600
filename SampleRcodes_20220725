@@ -1,0 +1,160 @@
+######################################################################################
+## R codes were written for a training for preventive medicine on July 25, 2022
+##
+## By Youn-Hee Lim, University of Copenhagen
+##
+## Example analyis for sustainable research and development
+######################################################################################
+
+
+###  library read in the external library #####
+library(mgcv)
+
+#instmort.packages("tsModel") #한번만 설치하면 됨.
+library(tsModel)
+
+#instmort.packages("splines") #한번만 설치하면 됨.
+library(splines)
+
+#instmort.packages("plotrix") #한번만 설치하면 됨.
+library(plotrix)
+
+library(HEAT)
+#####################################################
+## Analysis 1: Exploratory data analysis
+#####################################################
+
+## load korean data 
+
+data(mort)
+head(mort)
+
+##Important: a 'date' variable should be in the date format##
+
+lct <- Sys.getlocale("LC_TIME")
+lct 					#korean time
+Sys.setlocale("LC_TIME", "C") # turn off locale-specific sorting,
+
+class(mort$date)
+mort$date=as.Date(mort$date)
+class(mort$date)
+
+mort$year=substr(mort$date, 1, 4)
+
+mort$dow=weekdays(mort$date)
+mort$month=months(mort$date)
+
+table(mort$month)
+
+mort$sn=as.numeric(mort$date)
+
+## mort has 7 cities and 9 provinces
+## Read data for each city
+## Subsetting Vectors, Matrices and Data Frames/ Date conversion
+
+seoul <-subset(mort, ccode==11 ) 
+incheon <-subset(mort, ccode==23 ) 
+daejeon <-subset(mort, ccode==25 ) 
+daegu <-subset(mort, ccode==22 ) 
+busan <-subset(mort, ccode==21 ) 
+gwangju <-subset(mort, ccode==24) 
+
+
+length(table(seoul$sn))
+length(table(seoul$date))
+
+#####################################################
+## (1) examine time trend
+#####################################################
+
+## Daily temperature
+plot(seoul$date,				# x-axis value
+     seoul$meantemp, 				# y-axis value
+     ylab="Temperature", 				# y-axis label
+     xaxt='n',				# clean out x-axis tick
+     xlab="",				# x-axis label
+     cex=0.6)				# font size for data
+
+## makeup for x-axis
+seq(as.Date("2000-01-01"), as.Date("2007-12-31"),"day")
+x.at<-seq(as.Date("2000-01-01"), as.Date("2007-12-31"),"year")
+xname=seq(2000, 2007, 1)
+axis(side=1, at=x.at, labels=xname, las=1)
+
+## add lowess line
+lines(lowess(seoul$date, seoul$meantemp,  f=0.1),col="red", lwd=2)
+
+## annual mean AT
+
+boxplot(at~year, ylab="Apparent Temperature",  axes=T,  data=seoul)
+
+
+
+
+## Daily mortality 
+win.graph(h=10)
+par(mfrow=c(3,1))
+yvar=c("nonacc", "cardio", "respir")
+for (k in 1:3)
+{
+  plot(seoul$date,				# x-axis value
+       seoul[, yvar[k]],			# y-axis value
+       ylab=yvar[k], 	# y-axis label
+       xaxt='n',				# clean out x-axis tick
+       xlab="",				# x-axis label
+       cex=0.6, 				# font size for data
+       main=paste0("(", letters[k], ") ", yvar[k]))
+  ## makeup for x-axis
+  seq(as.Date("2000-01-01"), as.Date("2007-12-31"),"day")
+  x.at<-seq(as.Date("2000-01-01"), as.Date("2007-12-31"),"year")
+  xname=seq(2000, 2007, 1)
+  axis(side=1, at=x.at, labels=xname, las=1)
+  ## add lowess line
+  lines(lowess(seoul$date, seoul[, yvar[k]],  f=0.1),col="red", lwd=2)
+} # k
+
+#####################################################
+## (2) Association
+#####################################################
+
+## mortality data* mean temperature 
+
+## plotting data  (meantemp and non-accidental mortality in Seoul,2000-2007)
+win.graph(h=6)
+plot(seoul$meantemp, seoul$nonacc, 
+     ylab ="Total mortality", xlab= expression(Temperature*" ("*degree*"C)"), cex=0.6)
+
+#correlation coefficient
+cor(seoul$meanpm10, seoul$tot, method="pearson") 
+#0.16
+
+#linear line
+fit<-lm(nonacc~meantemp, data=seoul)
+summary(fit)
+abline(fit, col="blue", lwd=2) # linear line. lwh: line width
+
+#lowess line
+lines(lowess(seoul$meantemp, seoul$nonacc,  f=0.1),col="red", lwd=2)
+legend("topright", legend=c("Linear", "Non-linear"), col=c("blue", "red"))
+  
+       
+#####################################################
+## Analysis 2: GAM/GLM
+#####################################################
+
+####################################################
+## (1) GAM 
+####################################################
+library(mgcv)
+## To explore relationshiop
+fit2=gam(nonacc~  s(meantemp)
+         +s(meantemp)
+         +factor(dow)
+         +meanhumi
+         +s(sn,k=7*4)
+         ,data=seoul,na.rm=T,family=poisson)
+summ=summary(fit2)
+summary(fit2)
+par(mfrow=c(1,1))
+plot(fit2, select=1)
+abline(h=0, lty=2, col="grey")
